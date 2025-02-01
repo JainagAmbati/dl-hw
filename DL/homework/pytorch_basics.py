@@ -34,6 +34,7 @@ class PyTorchBasics:
 
         Solution length: 13 characters
         """
+        return x[::3]
         raise NotImplementedError
 
     @staticmethod
@@ -58,6 +59,8 @@ class PyTorchBasics:
 
         Solution length: 26 characters
         """
+        v,i = torch.max(x,-1)
+        return v
         raise NotImplementedError
 
     @staticmethod
@@ -77,6 +80,7 @@ class PyTorchBasics:
 
         Solution length: 22 characters
         """
+        return torch.unique(x,sorted=True)
         raise NotImplementedError
 
     @staticmethod
@@ -102,6 +106,7 @@ class PyTorchBasics:
 
         Solution length: 27 characters
         """
+        return torch.sum(y > torch.mean(x))
         raise NotImplementedError
 
     @staticmethod
@@ -121,6 +126,7 @@ class PyTorchBasics:
 
         Solution length: 11 characters
         """
+        return x.t()
         raise NotImplementedError
 
     @staticmethod
@@ -139,6 +145,7 @@ class PyTorchBasics:
 
         Solution length: 19 characters
         """
+        return torch.diagonal(x)
         raise NotImplementedError
 
     @staticmethod
@@ -157,6 +164,7 @@ class PyTorchBasics:
 
         Solution length: 27 characters
         """
+        return x.flip(dims=[1]).diagonal()
         raise NotImplementedError
 
     @staticmethod
@@ -177,6 +185,7 @@ class PyTorchBasics:
 
         Solution length: 22 characters
         """
+        return x.cumsum(dim=0)
         raise NotImplementedError
 
     @staticmethod
@@ -202,6 +211,8 @@ class PyTorchBasics:
 
         Solution length: 36 characters
         """
+        x = x.cumsum(dim=1)
+        return x.cumsum(dim=0)
         raise NotImplementedError
 
     @staticmethod
@@ -225,6 +236,7 @@ class PyTorchBasics:
 
         Solution length: 49 characters
         """
+        return torch.where(x<c,0.0,x)
         raise NotImplementedError
 
     @staticmethod
@@ -249,6 +261,7 @@ class PyTorchBasics:
 
         Solution length: 30 characters
         """
+        return torch.stack(torch.nonzero(x<c,as_tuple=True))
         raise NotImplementedError
 
     @staticmethod
@@ -269,6 +282,7 @@ class PyTorchBasics:
 
         Solution length: 11 characters
         """
+        return x[m]
         raise NotImplementedError
 
     @staticmethod
@@ -293,6 +307,7 @@ class PyTorchBasics:
 
         Solution length: 36 characters
         """
+        return torch.diff(x,append=y)
         raise NotImplementedError
 
     @staticmethod
@@ -314,4 +329,7 @@ class PyTorchBasics:
 
         Solution length: 64 characters
         """
+        z = (x.unsqueeze(1) - y).abs()
+        z = torch.sum(z<1e-3,1).gt(0)
+        return z.sum()
         raise NotImplementedError
