@@ -21,6 +21,9 @@ class WeatherForecast:
             min_per_day: tensor of size (num_days,)
             max_per_day: tensor of size (num_days,)
         """
+        min_per_day = self.data.min(dim=1).values
+        max_per_day = self.data.max(dim=1).values
+        return min_per_day, max_per_day
         raise NotImplementedError
 
     def find_the_largest_drop(self) -> torch.Tensor:
@@ -31,6 +34,9 @@ class WeatherForecast:
         Returns:
             tensor of a single value, the difference in temperature
         """
+        avg_temps = self.data.mean(dim=1)  # Compute daily average temperature
+        temp_diff = avg_temps.diff()  # Compute difference between consecutive days
+        return temp_diff.min()
         raise NotImplementedError
 
     def find_the_most_extreme_day(self) -> torch.Tensor:
@@ -40,6 +46,10 @@ class WeatherForecast:
         Returns:
             tensor with size (num_days,)
         """
+        avg_temps = self.data.mean(dim=1, keepdim=True)
+        diff = (self.data - avg_temps).abs().max(dim=-1).indices
+        diff = torch.gather(self.data, 1, diff.unsqueeze(1)).squeeze(1)
+        return diff
         raise NotImplementedError
 
     def max_last_k_days(self, k: int) -> torch.Tensor:
@@ -49,6 +59,7 @@ class WeatherForecast:
         Returns:
             tensor of size (k,)
         """
+        return self.data[-k:].max(dim=1).values
         raise NotImplementedError
 
     def predict_temperature(self, k: int) -> torch.Tensor:
@@ -62,6 +73,7 @@ class WeatherForecast:
         Returns:
             tensor of a single value, the predicted temperature
         """
+        return self.data[-k:].mean()
         raise NotImplementedError
 
     def what_day_is_this_from(self, t: torch.FloatTensor) -> torch.LongTensor:
@@ -87,4 +99,6 @@ class WeatherForecast:
         Returns:
             tensor of a single value, the index of the closest data element
         """
+        diffs = torch.abs(self.data - t).sum(dim=1)  # Compute sum of absolute differences
+        return torch.argmin(diffs)
         raise NotImplementedError

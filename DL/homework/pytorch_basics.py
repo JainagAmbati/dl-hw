@@ -80,7 +80,7 @@ class PyTorchBasics:
 
         Solution length: 22 characters
         """
-        return torch.unique(x,sorted=True)
+        return x.unique(sorted=True)
         raise NotImplementedError
 
     @staticmethod
