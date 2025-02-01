@@ -1,0 +1,33 @@
+# Exclude all .zip files
+*.zip
+
+# Exclude all .pyc files
+*.pyc
+
+
+# Exclude specific directories
+homework2/logs/
+homework2/log/
+homework2/run/
+homework2/runs/
+homework2/data/
+homework2/road_data/
+homework2/drive_data/
+
+homework3/logs/
+homework3/log/
+homework3/run/
+homework3/runs/
+homework3/data/
+homework3/road_data/
+homework3/drive_data/
+
+homework4/logs/
+homework4/log/
+homework4/run/
+homework4/runs/
+homework4/data/
+homework4/road_data/
+homework4/drive_data/
+
+
