@@ -34,8 +34,8 @@ class WeatherForecast:
         Returns:
             tensor of a single value, the difference in temperature
         """
-        avg_temps = self.data.mean(dim=1)  # Compute daily average temperature
-        temp_diff = avg_temps.diff()  # Compute difference between consecutive days
+        avg_temps = self.data.mean(dim=1)
+        temp_diff = avg_temps.diff()
         return temp_diff.min()
         raise NotImplementedError
 
@@ -99,6 +99,6 @@ class WeatherForecast:
         Returns:
             tensor of a single value, the index of the closest data element
         """
-        diffs = torch.abs(self.data - t).sum(dim=1)  # Compute sum of absolute differences
+        diffs = torch.abs(self.data - t).sum(dim=1)
         return torch.argmin(diffs)
         raise NotImplementedError
