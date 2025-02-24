@@ -61,7 +61,7 @@ class MLPClassifier(nn.Module):
         self,
         h: int = 64,
         w: int = 64,
-        num_classes: int = 6, hidden_dim: int = 128
+        num_classes: int = 6, hidden_dim: int = 190
     ):
         """
         An MLP with a single hidden layer
@@ -73,6 +73,7 @@ class MLPClassifier(nn.Module):
         """
         super().__init__()
         self.fc1 = nn.Linear(3 * h * w, hidden_dim)
+        self.dp = torch.nn.Dropout(0.2)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -85,6 +86,7 @@ class MLPClassifier(nn.Module):
         """
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
+        x = self.dp(x)
         return self.fc2(x)
 
 
@@ -94,7 +96,7 @@ class MLPClassifierDeep(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
-        hidden_dim: int = 256, num_layers: int = 3
+        hidden_dim: int = 128, num_layers: int = 3
     ):
         """
         An MLP with multiple hidden layers
@@ -111,6 +113,7 @@ class MLPClassifierDeep(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList()
         self.layers.append(nn.Linear(3 * h * w, hidden_dim))
+        self.dp = nn.Dropout(0.2)
         for _ in range(num_layers - 1):
             self.layers.append(nn.Linear(hidden_dim, hidden_dim))
         
@@ -127,6 +130,7 @@ class MLPClassifierDeep(nn.Module):
         x = x.view(x.size(0), -1)
         for layer in self.layers[:-1]:
             x = F.relu(layer(x))
+            x = self.dp(x)
         return self.layers[-1](x)
 
 
@@ -136,7 +140,7 @@ class MLPClassifierDeepResidual(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6, 
-        hidden_dim: int = 256, num_layers: int = 3
+        hidden_dim: int = 128, num_layers: int = 3
     ):
         """
         Args:
@@ -150,6 +154,7 @@ class MLPClassifierDeepResidual(nn.Module):
         """
         super().__init__()
         self.input_layer = nn.Linear(3 * h * w, hidden_dim)
+        # self.dp = nn.Dropout(0.2)
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 1)]
         )
@@ -167,7 +172,7 @@ class MLPClassifierDeepResidual(nn.Module):
         x = F.relu(self.input_layer(x))
         for layer in self.hidden_layers:
             residual = x
-            x = F.relu(layer(x)) + residual  # Residual connection
+            x = F.relu(layer(x)) + residual # Residual connection
         return self.output_layer(x)
 
 
