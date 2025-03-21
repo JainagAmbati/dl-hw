@@ -60,11 +60,21 @@ def train(
 
         model.train()
 
-        for img, label in train_data:
-            img, label = img.to(device), label.to(device)
+        for x in train_data:
+            img = x['image']
+            depth = x['depth']
+            track = x['track']
+
+            img, depth, track = img.to(device), depth.to(device), track.to(device)
             
             optimizer.zero_grad()
-            outputs = model(img)
+            logits, raw_depth = model(img)
+            print("logits",logits.shape)
+            print("raw_depth",raw_depth.shape)
+            print("gt_depth",depth.shape)
+            print("gt_track",track.shape)
+            import sys
+            sys.exit(0)
             loss = loss_func(outputs, label)
             loss.backward()
             optimizer.step()
