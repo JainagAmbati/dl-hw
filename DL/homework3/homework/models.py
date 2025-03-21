@@ -13,6 +13,29 @@ class ClassificationLoss(nn.Module):
       
         return F.cross_entropy(logits, target)
 
+class DetectionLoss(nn.Module):
+    def __init__(self, seg_weight=1.0, depth_weight=1.0, reduction='mean'):
+        super(DetectionLoss, self).__init__()
+        self.seg_weight = seg_weight
+        self.depth_weight = depth_weight
+        self.ce_loss = nn.CrossEntropyLoss(reduction=reduction)
+        self.mse_loss = nn.MSELoss(reduction=reduction)
+
+    def forward(self, logits, targets, pred_depth, true_depth):
+        """
+        Args:
+            logits: (b, num_classes, h, w) - raw segmentation logits
+            targets: (b, h, w) - ground truth segmentation labels
+            pred_depth: (b, h, w) - predicted depth
+            true_depth: (b, h, w) - ground truth depth
+        Returns:
+            combined loss value
+        """
+        seg_loss = self.ce_loss(logits, targets)
+        depth_loss = self.mse_loss(pred_depth, true_depth)
+        
+        return self.seg_weight * seg_loss + self.depth_weight * depth_loss
+
 class Classifier(nn.Module):
     def __init__(
         self,
