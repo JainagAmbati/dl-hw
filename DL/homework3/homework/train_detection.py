@@ -14,7 +14,7 @@ from .datasets.road_dataset import load_data
 # /content/dl-hw/DL/homework3/homework/models.py
 def train(
     exp_dir: str = "logs",
-    model_name: str = "classifier",
+    model_name: str = "detector",
     num_epoch: int = 50,
     lr: float = 1e-3,
     batch_size: int = 128,
@@ -63,37 +63,44 @@ def train(
         for x in train_data:
             img = x['image']
             depth = x['depth']
-            track = x['track']
+            track = x['track'] #gt_logits
 
             img, depth, track = img.to(device), depth.to(device), track.to(device)
             
             optimizer.zero_grad()
             logits, raw_depth = model(img)
-            print("logits",logits.shape)
-            print("raw_depth",raw_depth.shape)
-            print("gt_depth",depth.shape)
-            print("gt_track",track.shape)
-            import sys
-            sys.exit(0)
-            loss = loss_func(outputs, label)
+            pred = logits.argmax(dim=1)
+            # print("img",img.shape)
+            # print("logits",logits.shape)
+            # print("raw_depth",raw_depth.shape)
+            # print("gt_depth",depth.shape)
+            # print("gt_track",track.shape)
+            # import sys
+            # sys.exit(0)
+            loss = loss_func(logits, track, raw_depth, depth)
             loss.backward()
             optimizer.step()
 
-            preds = torch.argmax(outputs, dim=1)
-            acc = (preds == label).float().mean().item()
+            # preds = torch.argmax(outputs, dim=1)
+            # acc = (preds == label).float().mean().item()
+            # metrics["train_acc"].append(acc)
+            acc = (pred == track).float().mean().item()
             metrics["train_acc"].append(acc)
-
             global_step += 1
 
         # disable gradient computation and switch to evaluation mode
         with torch.inference_mode():
             model.eval()
 
-            for img, label in val_data:
-                img, label = img.to(device), label.to(device)
-                outputs = model(img)
-                preds = torch.argmax(outputs, dim=1)
-                acc = (preds == label).float().mean().item()
+            for x in val_data:
+                img = x['image']
+                depth = x['depth']
+                track = x['track'] #gt_logits
+
+                img, depth, track = img.to(device), depth.to(device), track.to(device)
+                pred, depth = model.predict(img)
+                
+                acc = (pred == track).float().mean().item()
                 metrics["val_acc"].append(acc)
 
         # log average train and val accuracy to tensorboard

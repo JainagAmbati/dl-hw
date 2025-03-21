@@ -137,7 +137,15 @@ class Detector(torch.nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(64, num_classes, kernel_size=2, stride=2)
         )
-        self.depth_head = nn.Conv2d(256, 1, kernel_size=1)
+        self.depth_head = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, kernel_size=2, stride=2)  # Ensure final (b, 1, h, w)
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -156,7 +164,7 @@ class Detector(torch.nn.Module):
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
         enc = self.encoder(z)
         logits = self.decoder(enc)
-        raw_depth = torch.sigmoid(self.depth_head(enc).squeeze(1))
+        raw_depth = self.depth_head(enc).squeeze(1)
         return logits, raw_depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
