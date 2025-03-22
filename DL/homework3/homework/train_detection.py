@@ -10,9 +10,6 @@ from .models import DetectionLoss, load_model, save_model
 from .datasets.road_dataset import load_data
 from .metrics import DetectionMetric
 
-# /content/dl-hw/DL/homework3/classification_data
-# /content/dl-hw/DL/homework3/homework/datasets/classification_dataset.py
-# /content/dl-hw/DL/homework3/homework/models.py
 def train(
     exp_dir: str = "logs",
     model_name: str = "detector",
@@ -30,15 +27,13 @@ def train(
         print("CUDA not available, using CPU")
         device = torch.device("cpu")
 
-    # set random seed so each run is deterministic
+
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    # directory with timestamp to save tensorboard logs and model checkpoints
     log_dir = Path(exp_dir) / f"{model_name}_{datetime.now().strftime('%m%d_%H%M%S')}"
     logger = tb.SummaryWriter(log_dir)
 
-    # note: the grader uses default kwargs, you'll have to bake them in for the final submission
     model = load_model(model_name, **kwargs)
     model = model.to(device)
     model.train()
@@ -46,15 +41,12 @@ def train(
     train_data = load_data("drive_data/train", shuffle=True, batch_size=batch_size, num_workers=2)
     val_data = load_data("drive_data/val", shuffle=False)
 
-    # create loss function and optimizer
     loss_func = DetectionLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
-    metrics = {"train_acc": [], "val_acc": []}
     detmet_train = DetectionMetric()
     detmet_val = DetectionMetric()
-    # training loop
     for epoch in range(num_epoch):
         # clear metrics at beginning of epoch
         detmet_train.reset()
@@ -65,72 +57,45 @@ def train(
         for x in train_data:
             img = x['image']
             depth = x['depth']
-            track = x['track'] #gt_logits
+            track = x['track'] 
 
             img, depth, track = img.to(device), depth.to(device), track.to(device)
             
             optimizer.zero_grad()
             logits, raw_depth = model(img)
             pred = logits.argmax(dim=1)
-            # print("img",img.shape)
-            # print("logits",logits.shape)
-            # print("raw_depth",raw_depth.shape)
-            # print("gt_depth",depth.shape)
-            # print("gt_track",track.shape)
-            # import sys
-            # sys.exit(0)
+         
             loss = loss_func(logits, track, raw_depth, depth)
             loss.backward()
             optimizer.step()
             
             preds = torch.argmax(logits, dim=1)
             detmet_train.add(preds, track, raw_depth, depth)
-            # acc = (preds == label).float().mean().item()
-            # metrics["train_acc"].append(acc)
-            # acc = (pred == track).float().mean().item()
-            # metrics["train_acc"].append(acc)
+            
             global_step += 1
 
-        # disable gradient computation and switch to evaluation mode
+        
         with torch.inference_mode():
             model.eval()
 
             for x in val_data:
                 img = x['image']
                 depth = x['depth']
-                track = x['track'] #gt_logits
+                track = x['track'] 
 
                 img, depth, track = img.to(device), depth.to(device), track.to(device)
                 pred, raw_depth = model.predict(img)
                 detmet_train.add(pred, track, raw_depth, depth)
-                # acc = (pred == track).float().mean().item()
-                # metrics["val_acc"].append(acc)
 
-        # log average train and val accuracy to tensorboard
         metrics_train = detmet_train.compute()
         metrics_val = detmet_train.compute()
-        epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
-        epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
 
-        logger.add_scalar("Accuracy/Train", epoch_train_acc, epoch)
-        logger.add_scalar("Accuracy/Validation", epoch_val_acc, epoch)
-
-        # print on first, last, every 10th epoch
-        # if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
-        # print(
-        #     f"Epoch {epoch + 1:2d} / {num_epoch:2d}: "
-        #     f"train_acc={epoch_train_acc:.4f} "
-        #     f"val_acc={epoch_val_acc:.4f}"
-        # )
         print("-----------Epoch:",epoch,"--------")
         print("train:",metrics_train)
         print("val:",metrics_val)
-        if metrics_val['iou']>0.75:
-          save_model(model)
-    # save and overwrite the model in the root directory for grading
+  
     save_model(model)
 
-    # save a copy of model weights in the log directory
     torch.save(model.state_dict(), log_dir / f"{model_name}.th")
     print(f"Model saved to {log_dir / f'{model_name}.th'}")
 
@@ -144,8 +109,5 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=2024)
 
-    # optional: additional model hyperparamters
-    # parser.add_argument("--num_layers", type=int, default=3)
-
-    # pass all arguments to train
+   
     train(**vars(parser.parse_args()))
