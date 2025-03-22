@@ -125,7 +125,8 @@ def train(
         print("-----------Epoch:",epoch,"--------")
         print("train:",metrics_train)
         print("val:",metrics_val)
-
+        if metrics_val['iou']>0.75:
+          save_model(model)
     # save and overwrite the model in the root directory for grading
     save_model(model)
 

@@ -100,36 +100,58 @@ class Classifier(nn.Module):
         """
         return self(x).argmax(dim=1)
 
-class ResidualBlock(nn.Module):
-    """Basic Residual Block with two Conv layers."""
-    def __init__(self, in_channels, out_channels, downsample=False):
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        stride = 2 if downsample else 1
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        # Skip Connection (Downsampling if needed)
-        self.skip = nn.Sequential()
-        if in_channels != out_channels or downsample:
-            self.skip = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm2d(out_channels)
-            )
-
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+    
     def forward(self, x):
-        identity = self.skip(x)
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out += identity  # Residual connection
-        return self.relu(out)
+        return self.conv(x)
 
-class Detector2(torch.nn.Module):
+class Encoder(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.enc1 = ConvBlock(in_channels, 64)   # (128, 64, 96, 128)
+        self.enc2 = ConvBlock(64, 128)           # (128, 128, 48, 64)
+        self.enc3 = ConvBlock(128, 256)          # (128, 256, 24, 32)
+        
+        self.pool = nn.MaxPool2d(2, 2)
+    
+    def forward(self, x):
+        x1 = self.enc1(x)
+        x2 = self.enc2(self.pool(x1))
+        x3 = self.enc3(self.pool(x2))
+        
+        return x1, x2, x3
+
+class Decoder(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.up2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.dec2 = ConvBlock(256, 128)          # (128, 128, 48, 64)
+        self.up1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.dec1 = ConvBlock(128, 64)           # (128, 64, 96, 128)
+        
+        self.final_seg = nn.Conv2d(64, num_classes, kernel_size=1) # (128, 3, 96, 128)
+        self.final_depth = nn.Conv2d(64, 1, kernel_size=1)         # (128, 1, 96, 128)
+    
+    def forward(self, x1, x2, x3):
+        d2 = self.dec2(torch.cat([self.up2(x3), x2], dim=1))
+        d1 = self.dec1(torch.cat([self.up1(d2), x1], dim=1))
+        
+        logits = self.final_seg(d1)  # (128, 3, 96, 128)
+        depth = self.final_depth(d1).squeeze(1)  # (128, 96, 128)
+        
+        return logits, depth
+
+class Detector(torch.nn.Module):
     def __init__(
         self,
         in_channels: int = 3,
@@ -143,68 +165,19 @@ class Detector2(torch.nn.Module):
             num_classes: int
         """
         super().__init__()
-
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
-
-        self.enc1 = ResidualBlock(in_channels, 16, downsample=True)  # (b, 16, h/2, w/2) 48
-        self.enc2 = ResidualBlock(16, 32, downsample=True)  # (b, 32, h/4, w/4) 24
-        self.enc3 = ResidualBlock(32, 64, downsample=True)  # (b, 64, h/8, w/8) 12
-        self.enc4 = ResidualBlock(64, 128, downsample=True)  # (b, 128, h/16, w/16) 6
-
-        # Bottleneck
-        self.bottleneck = ResidualBlock(128, 256)  # (b, 256, h/16, w/16) 6
-
-        # Decoder
-        self.dec4 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)  # (b, 128, h/8, w/8) 12
-        self.up4 = ResidualBlock(256, 128)  # (b, 128, h/8, w/8) 12
-
-        self.dec3 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)  # (b, 64, h/4, w/4) 24
-        self.up3 = ResidualBlock(128, 64)  # (b, 64, h/4, w/4)
-
-        self.dec2 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)  # (b, 32, h/2, w/2)
-        self.up2 = ResidualBlock(64, 32)  # (b, 32, h/2, w/2)
-
-        self.dec1 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)  # (b, 16, h, w)
-        self.up1 = ResidualBlock(32, 16)  # (b, 16, h, w)
-
-        # Segmentation Head (Final Output for Segmentation)
-        self.segmentation_head = nn.Conv2d(16, num_classes, kernel_size=1)
-
-        # Depth Head (Final Output for Depth Prediction)
-        self.depth_head = nn.Conv2d(16, 1, kernel_size=1)
+        
+        self.encoder = Encoder(in_channels)
+        self.decoder = Decoder(num_classes)
 
     def forward(self, x):
         """Forward pass: Returns segmentation logits and depth prediction."""
-        x = (x - self.input_mean) / self.input_std  # Normalize input
+        z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # Encoding
-        enc1 = self.enc1(x)  # (b, 16, h/2, w/2)
-        enc2 = self.enc2(enc1)  # (b, 32, h/4, w/4)
-        enc3 = self.enc3(enc2)  # (b, 64, h/8, w/8)
-        enc4 = self.enc4(enc3)  # (b, 128, h/16, w/16)
-
-        # Bottleneck
-        bottleneck = self.bottleneck(enc4)  # (b, 256, h/16, w/16)
-
-        # Decoding with skip connections
-        dec4 = self.dec4(bottleneck)  # (b, 128, h/8, w/8)
-        up4 = self.up4(torch.cat([dec4, enc4], dim=1))  # (b, 128, h/8, w/8)
-
-        dec3 = self.dec3(up4)  # (b, 64, h/4, w/4)
-        up3 = self.up3(torch.cat([dec3, enc3], dim=1))  # (b, 64, h/4, w/4)
-
-        dec2 = self.dec2(up3)  # (b, 32, h/2, w/2)
-        up2 = self.up2(torch.cat([dec2, enc2], dim=1))  # (b, 32, h/2, w/2)
-
-        dec1 = self.dec1(up2)  # (b, 16, h, w)
-        up1 = self.up1(torch.cat([dec1, enc1], dim=1))  # (b, 16, h, w)
-
-        # Final Outputs
-        logits = self.segmentation_head(up1)  # (b, num_classes, h, w)
-        raw_depth = self.depth_head(up1).squeeze(1)  # (b, h, w)
-
-        return logits, raw_depth
+        x1, x2, x3 = self.encoder(z)
+        logits, depth = self.decoder(x1, x2, x3)
+        return logits, depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -227,7 +200,7 @@ class Detector2(torch.nn.Module):
 
         return pred, depth
 
-class Detector(torch.nn.Module):
+class Detector2(torch.nn.Module):
     def __init__(
         self,
         in_channels: int = 3,
