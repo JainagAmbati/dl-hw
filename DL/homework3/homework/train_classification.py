@@ -9,9 +9,6 @@ import torch.utils.tensorboard as tb
 from .models import ClassificationLoss, load_model, save_model
 from .datasets.classification_dataset import load_data
 
-# /content/dl-hw/DL/homework3/classification_data
-# /content/dl-hw/DL/homework3/homework/datasets/classification_dataset.py
-# /content/dl-hw/DL/homework3/homework/models.py
 def train(
     exp_dir: str = "logs",
     model_name: str = "classifier",
