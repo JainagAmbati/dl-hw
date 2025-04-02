@@ -14,7 +14,7 @@ from .metrics import PlannerMetric
 def train(
     exp_dir: str = "logs",
     model_name: str = "linear_planner",
-    transform_pipeline="state_only",
+    transform_pipeline="default",
     num_workers = 4,
     num_epoch: int = 50,
     lr: float = 1e-3,
@@ -58,13 +58,14 @@ def train(
         model.train()
 
         for x in train_data:
-      
+
+            img = x['image']
             track_left = x['track_left']
             track_right = x['track_right'] 
             waypoints = x['waypoints']
             waypoints_mask = x['waypoints_mask']
 
-            track_left, track_right, waypoints, waypoints_mask = track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
+            img, track_left, track_right, waypoints, waypoints_mask = img.to(device), track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
             # print(x.keys())
             # print(track_left.shape)
             # print(track_right.shape)
@@ -77,7 +78,10 @@ def train(
             # import sys
             # sys.exit(0)
             optimizer.zero_grad()
-            pred_waypoints = model(track_left, track_right)
+            if model_name == 'cnn_planner':
+              pred_waypoints = model(img)
+            else:
+              pred_waypoints = model(track_left, track_right)
             # pred = logits.argmax(dim=1)
          
             loss = loss_func(pred_waypoints, waypoints)
@@ -94,14 +98,19 @@ def train(
             model.eval()
 
             for x in val_data:
+
+                img = x['image']
                 track_left = x['track_left']
                 track_right = x['track_right'] 
                 waypoints = x['waypoints']
                 waypoints_mask = x['waypoints_mask']
 
-                track_left, track_right, waypoints, waypoints_mask = track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
+                img, track_left, track_right, waypoints, waypoints_mask = img.to(device), track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
                 
-                pred_waypoints = model(track_left, track_right)
+                if model_name == 'cnn_planner':
+                  pred_waypoints = model(img)
+                else:
+                  pred_waypoints = model(track_left, track_right)
             
                 loss = loss_func(pred_waypoints, waypoints)
                 detmet_val.add(pred_waypoints, waypoints, waypoints_mask)
