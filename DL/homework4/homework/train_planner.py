@@ -5,15 +5,17 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.utils.tensorboard as tb
+import torch.nn as nn
 
-from .models import DetectionLoss, load_model, save_model
+from .models import load_model, save_model
 from .datasets.road_dataset import load_data
-from .metrics import DetectionMetric
+from .metrics import PlannerMetric
 
 def train(
     exp_dir: str = "logs",
     model_name: str = "linear_planner",
     transform_pipeline="state_only",
+    num_workers = 4,
     num_epoch: int = 50,
     lr: float = 1e-3,
     batch_size: int = 128,
@@ -39,15 +41,15 @@ def train(
     model = model.to(device)
     model.train()
 
-    train_data = load_data("drive_data/train", shuffle=True, batch_size=batch_size, num_workers=2)
-    val_data = load_data("drive_data/val", shuffle=False)
+    train_data = load_data("drive_data/train", shuffle=True, batch_size=batch_size, num_workers=num_workers, transform_pipeline = transform_pipeline)
+    val_data = load_data("drive_data/val", shuffle=False, transform_pipeline = transform_pipeline)
 
-    loss_func = DetectionLoss()
+    loss_func = nn.MSELoss(reduction='mean')
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     global_step = 0
-    detmet_train = DetectionMetric()
-    detmet_val = DetectionMetric()
+    detmet_train = PlannerMetric()
+    detmet_val = PlannerMetric()
     for epoch in range(num_epoch):
         # clear metrics at beginning of epoch
         detmet_train.reset()
@@ -56,24 +58,34 @@ def train(
         model.train()
 
         for x in train_data:
-            img = x['image']
-            depth = x['depth']
-            track = x['track'] 
+      
+            track_left = x['track_left']
+            track_right = x['track_right'] 
+            waypoints = x['waypoints']
+            waypoints_mask = x['waypoints_mask']
 
-            img, depth, track = img.to(device), depth.to(device), track.to(device)
-            print(track.shape)
-            import sys
-            sys.exit(0)
+            track_left, track_right, waypoints, waypoints_mask = track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
+            # print(x.keys())
+            # print(track_left.shape)
+            # print(track_right.shape)
+            # print(waypoints.shape)
+            # print(waypoints_mask.shape)
+            # print("###")
+            # print(waypoints[127])
+            # print(waypoints_mask[127])
+            
+            # import sys
+            # sys.exit(0)
             optimizer.zero_grad()
-            logits, raw_depth = model(img)
-            pred = logits.argmax(dim=1)
+            pred_waypoints = model(track_left, track_right)
+            # pred = logits.argmax(dim=1)
          
-            loss = loss_func(logits, track, raw_depth, depth)
+            loss = loss_func(pred_waypoints, waypoints)
             loss.backward()
             optimizer.step()
             
-            preds = torch.argmax(logits, dim=1)
-            detmet_train.add(preds, track, raw_depth, depth)
+            # preds = torch.argmax(logits, dim=1)
+            detmet_train.add(pred_waypoints, waypoints, waypoints_mask)
             
             global_step += 1
 
@@ -82,16 +94,21 @@ def train(
             model.eval()
 
             for x in val_data:
-                img = x['image']
-                depth = x['depth']
-                track = x['track'] 
+                track_left = x['track_left']
+                track_right = x['track_right'] 
+                waypoints = x['waypoints']
+                waypoints_mask = x['waypoints_mask']
 
-                img, depth, track = img.to(device), depth.to(device), track.to(device)
-                pred, raw_depth = model.predict(img)
-                detmet_train.add(pred, track, raw_depth, depth)
+                track_left, track_right, waypoints, waypoints_mask = track_left.to(device), track_right.to(device), waypoints.to(device), waypoints_mask.to(device)
+                
+                pred_waypoints = model(track_left, track_right)
+            
+                loss = loss_func(pred_waypoints, waypoints)
+                detmet_val.add(pred_waypoints, waypoints, waypoints_mask)
+            
 
         metrics_train = detmet_train.compute()
-        metrics_val = detmet_train.compute()
+        metrics_val = detmet_val.compute()
 
         print("-----------Epoch:",epoch,"--------")
         print("train:",metrics_train)
