@@ -70,6 +70,12 @@ class TransformerPlanner(nn.Module):
 
         self.query_embed = nn.Embedding(n_waypoints, d_model)
 
+        self.encoder = nn.Linear(n_track * 4, d_model)
+        self.transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=d_model, nhead=4), num_layers=4
+        )
+        self.fc = nn.Linear(d_model, n_waypoints * 2)
+
     def forward(
         self,
         track_left: torch.Tensor,
@@ -89,7 +95,12 @@ class TransformerPlanner(nn.Module):
         Returns:
             torch.Tensor: future waypoints with shape (b, n_waypoints, 2)
         """
-        raise NotImplementedError
+        x = torch.cat([track_left, track_right], dim=-1)
+        x = x.view(x.shape[0], -1)  # Flatten
+        x = self.encoder(x).unsqueeze(0)  # (1, batch, d_model)
+        x = self.transformer(x).squeeze(0)
+        x = self.fc(x)
+        return x.view(-1, self.n_waypoints, 2)
 
 
 class CNNPlanner(torch.nn.Module):
@@ -103,6 +114,11 @@ class CNNPlanner(torch.nn.Module):
 
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, stride=2, padding=2)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2)
+        self.fc1 = nn.Linear(128 * 16 * 16, 256)
+        self.fc2 = nn.Linear(256, n_waypoints * 2)
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -114,8 +130,13 @@ class CNNPlanner(torch.nn.Module):
         """
         x = image
         x = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
-
-        raise NotImplementedError
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = x.view(x.shape[0], -1)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x.view(-1, self.n_waypoints, 2)
 
 
 MODEL_FACTORY = {
